@@ -1,4 +1,8 @@
 #https://googlechromelabs.github.io/chrome-for-testing/#stable
+'''
+1. 元素定位
+2. 元素被遮掩
+'''
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -9,6 +13,7 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+import random
 
 import threading
 '''
@@ -21,7 +26,7 @@ def get_element(driver, locator, value, wait_time=10, attempts=3):
     for attempt in range(attempts):
         try:
             element = wait.until(EC.visibility_of_element_located((getattr(By, locator.upper()), value)))
-            WebDriverWait(driver, wait_time).until(EC.element_to_be_clickable((getattr(By, locator.upper()), value)))
+            # WebDriverWait(driver, wait_time).until(EC.element_to_be_clickable((getattr(By, locator.upper()), value)))
             return element
     
         except StaleElementReferenceException:
@@ -31,9 +36,12 @@ def get_element(driver, locator, value, wait_time=10, attempts=3):
                 raise
 
 
+
 dir_path = os.path.dirname(os.path.realpath(__file__))
 # 创建一个webdriver的实例，指定chromedriver的路径
 browser = webdriver.Chrome(executable_path=os.path.join(dir_path, 'chromedriver'))
+# browser.implicitly_wait(30) # seconds
+
 course_list=[]
 
 
@@ -43,15 +51,14 @@ def login():
   browser.get('https://new.cddyjy.com/login/pwd')
   # 点击登录按钮
   # 等待登录按钮出现
-  wait = WebDriverWait(browser, 10)
-
+  wait = WebDriverWait(browser, 60)
   login_button = wait.until(EC.visibility_of_element_located((By.XPATH, "//span[text()='登录']")))
 
 
   idcard_element = browser.find_element_by_class_name('ivu-input-large')
-  idcard_element.send_keys('17888808295')
+  idcard_element.send_keys('8F354445292435B2 ')
   password_element = browser.find_element_by_xpath("//input[@type='password']")
-  password_element.send_keys('Guliangjin56655')
+  password_element.send_keys('Rcxf123456')
   
   login_button.click()
 
@@ -70,50 +77,43 @@ def GoCouseList():
 
   # 在新的标签中打开另一个网页
   browser.get('https://new.cddyjy.com/member-education/online/courseinfo?id=08db30f3-2ed6-b5f7-dba9-21acc9bdf544')
+
+  time.sleep(5)
   
 def GetCourseList():
-    time.sleep(2)
-  
-    unfinished_courses = []
+    try:
+        unfinished_courses = []
+        # 找到所有课程的元素
+        course_elements = browser.find_elements(By.CSS_SELECTOR, "tr.ivu-table-row")
 
-    # 找到所有课程的元素
-    course_elements = browser.find_elements(By.XPATH, "//tr[contains(@class, 'ivu-table-row')]")
+        for course in course_elements:
+            # 检查课程状态是不是"未完成"
+            status = course.find_element(By.CSS_SELECTOR, "td:nth-child(6) div span").text
+            if status == '未完成':
+                # 如果课程未完成，获取课程名称并添加到列表中
+                title = course.find_element(By.CSS_SELECTOR, "td:nth-child(1) div span span").text
+                # 获取"去学习"按钮的元素
+                button = course.find_element(By.CSS_SELECTOR, "td:nth-child(7) div a")
+                unfinished_courses.append((title, button))
 
-    for course in course_elements:
-        # 检查课程状态是不是"未完成"
-        status = course.find_element(By.XPATH, ".//td[6]//span").text
-        if status == '未完成':
-            # 如果课程未完成，获取课程名称并添加到列表中
-             # 如果课程未完成，获取课程名称
-            title = course.find_element(By.XPATH, ".//td[1]//span/span").text
-            # 获取"去学习"按钮的元素
-            button = course.find_element(By.XPATH, ".//td[last()]//a")
-            unfinished_courses.append((title, button))
-    time.sleep(2)
-    return unfinished_courses
+        time.sleep(2)
+        return unfinished_courses
+
+    except Exception:
+        print("An error occurred while getting the course list, retrying...")
+        return []  # 返回一个空列表
 
 def LearnCourse(course):
-  
-  time.sleep(2)
-  # title_element = browser.find_element(By.XPATH, f"//span[@class='buyCourse_itemTitle el-popover__reference' and contains(text(), '{course_name}')]")
-  course[1].click()
-  time.sleep(5)
-  while not isVideoFinished():
-      time.sleep(20)
-    
-
-     
-def try_reset_video():
-    try:
-      time.sleep(2)  # 等待页面加载
-      # 定位按钮
-      reset_button = browser.find_element_by_xpath('//button[contains(@class, "vjs-play-control") and contains(@class, "vjs-paused")]')
-      if reset_button and reset_button.is_displayed():
-        reset_button.click()
-      else:
-        print("not find")
-    except NoSuchElementException as e:
-      print(f"An error occurred: {e}")
+  try:
+      clicker = course[1]
+      browser.execute_script("arguments[0].click();", clicker)
+      wait = WebDriverWait(browser, 5)
+      play_buttons = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.vjs-big-play-button')))
+      play_buttons.click()
+      while not isVideoFinished():
+          time.sleep(60)
+  except Exception:
+      print(f"An error occurred with {course}, retrying...")
 
 def isVideoFinished():
  
@@ -133,20 +133,31 @@ def isVideoFinished():
 
 
 login()
-time.sleep(2)
+time.sleep(10)
 GoCouseList()
 courses = GetCourseList()
-while len(courses) > 0:  
+continue_not_found_course_time = 0
+
+# print(courses)
+while True:  
   try:
       # 从课程列表中获取一个课程
-      course = courses.pop(0)
-      # print("start : ", course)
-      LearnCourse(course)
+      if len(courses) > 0:
+        continue_not_found_course_time = 0
+        course = random.choice(courses)
+        # course = courses.pop(0)
+        # print("start : ", course)
+        LearnCourse(course)
       GoCouseList()
-  except NoSuchElementException:
-      print(f"An error occurred with {course}")
-      break
+  except Exception:
+      print("NoSuchElementException occurred, going back to course list...")
+      GoCouseList()  # 如果找不到元素，重新进入课程列表
   courses = GetCourseList()
+  if len(courses) == 0:
+    continue_not_found_course_time += 1
+    if continue_not_found_course_time > 100:
+      print(f"can't found course, try {continue_not_found_course_time} fail, exit!!!")
+
 
 
 
